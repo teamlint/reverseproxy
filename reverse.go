@@ -1,6 +1,7 @@
 package reverseproxy
 
 import (
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -11,7 +12,10 @@ import (
 	"time"
 )
 
-var onExitFlushLoop func()
+var (
+	onExitFlushLoop         func()
+	ErrHijackerNotSupported = errors.New("http server does not support hijacker")
+)
 
 const (
 	defaultTimeout = time.Minute * 5
@@ -221,7 +225,7 @@ func addXForwardedForHeader(req *http.Request) {
 	}
 }
 
-func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
+func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) error {
 	transport := p.Transport
 	if transport == nil {
 		transport = http.DefaultTransport
@@ -266,7 +270,7 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		p.logf("http: Transport.RoundTrip proxy error: %v", err)
 		rw.WriteHeader(http.StatusBadGateway)
-		return
+		return err
 	}
 
 	// Remove hop-by-hop headers listed in the "Connection" header of the response, Remove hop-by-hop headers.
@@ -276,7 +280,7 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 		if err := p.ModifyResponse(res); err != nil {
 			p.logf("http: ModifyResponse proxy error: %v", err)
 			rw.WriteHeader(http.StatusBadGateway)
-			return
+			return err
 		}
 	}
 
@@ -306,25 +310,26 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 	// close now, instead of defer, to populate res.Trailer
 	res.Body.Close()
 	copyHeader(rw.Header(), res.Trailer)
+	return nil
 }
 
-func (p *ReverseProxy) ProxyHTTPS(rw http.ResponseWriter, req *http.Request) {
+func (p *ReverseProxy) ProxyHTTPS(rw http.ResponseWriter, req *http.Request) error {
 	hij, ok := rw.(http.Hijacker)
 	if !ok {
-		p.logf("http server does not support hijacker")
-		return
+		p.logf("%v", ErrHijackerNotSupported)
+		return ErrHijackerNotSupported
 	}
 
 	clientConn, _, err := hij.Hijack()
 	if err != nil {
 		p.logf("https: Hijack proxy error: %v", err)
-		return
+		return err
 	}
 
 	proxyConn, err := net.Dial("tcp", req.URL.Host)
 	if err != nil {
 		p.logf("https: Tcp.Dial proxy error: %v", err)
-		return
+		return err
 	}
 
 	// The returned net.Conn may have read or write deadlines
@@ -341,19 +346,19 @@ func (p *ReverseProxy) ProxyHTTPS(rw http.ResponseWriter, req *http.Request) {
 	err = clientConn.SetDeadline(deadline)
 	if err != nil {
 		p.logf("https: ClientConn.SetDeadline proxy error: %v", err)
-		return
+		return err
 	}
 
 	err = proxyConn.SetDeadline(deadline)
 	if err != nil {
 		p.logf("https: ProxyConn.SetDeadline proxy error: %v", err)
-		return
+		return err
 	}
 
 	_, err = clientConn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 	if err != nil {
-		p.logf("http: ClientConn.Write proxy error: %v", err)
-		return
+		p.logf("https: ClientConn.Write proxy error: %v", err)
+		return err
 	}
 
 	go func() {
@@ -362,9 +367,13 @@ func (p *ReverseProxy) ProxyHTTPS(rw http.ResponseWriter, req *http.Request) {
 		proxyConn.Close()
 	}()
 
-	io.Copy(proxyConn, clientConn)
+	_, err = io.Copy(proxyConn, clientConn)
+	if err != nil {
+		return nil
+	}
 	proxyConn.Close()
 	clientConn.Close()
+	return nil
 }
 
 func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
