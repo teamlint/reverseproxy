@@ -264,7 +264,7 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	res, err := transport.RoundTrip(outreq)
 	if err != nil {
-		p.logf("http: proxy error: %v", err)
+		p.logf("http: Transport.RoundTrip proxy error: %v", err)
 		rw.WriteHeader(http.StatusBadGateway)
 		return
 	}
@@ -274,7 +274,7 @@ func (p *ReverseProxy) ProxyHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	if p.ModifyResponse != nil {
 		if err := p.ModifyResponse(res); err != nil {
-			p.logf("http: proxy error: %v", err)
+			p.logf("http: ModifyResponse proxy error: %v", err)
 			rw.WriteHeader(http.StatusBadGateway)
 			return
 		}
@@ -317,13 +317,13 @@ func (p *ReverseProxy) ProxyHTTPS(rw http.ResponseWriter, req *http.Request) {
 
 	clientConn, _, err := hij.Hijack()
 	if err != nil {
-		p.logf("http: proxy error: %v", err)
+		p.logf("https: Hijack proxy error: %v", err)
 		return
 	}
 
 	proxyConn, err := net.Dial("tcp", req.URL.Host)
 	if err != nil {
-		p.logf("http: proxy error: %v", err)
+		p.logf("https: Tcp.Dial proxy error: %v", err)
 		return
 	}
 
@@ -340,19 +340,19 @@ func (p *ReverseProxy) ProxyHTTPS(rw http.ResponseWriter, req *http.Request) {
 
 	err = clientConn.SetDeadline(deadline)
 	if err != nil {
-		p.logf("http: proxy error: %v", err)
+		p.logf("https: ClientConn.SetDeadline proxy error: %v", err)
 		return
 	}
 
 	err = proxyConn.SetDeadline(deadline)
 	if err != nil {
-		p.logf("http: proxy error: %v", err)
+		p.logf("https: ProxyConn.SetDeadline proxy error: %v", err)
 		return
 	}
 
 	_, err = clientConn.Write([]byte("HTTP/1.0 200 OK\r\n\r\n"))
 	if err != nil {
-		p.logf("http: proxy error: %v", err)
+		p.logf("http: ClientConn.Write proxy error: %v", err)
 		return
 	}
 

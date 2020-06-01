@@ -5,7 +5,7 @@ Support cancels an in-flight request by closing it's connection
 
 # Installation
 ```sh
-go get github.com/cssivision/reverseproxy
+go get github.com/teamlint/reverseproxy
 ```
 
 # Usage
@@ -17,7 +17,7 @@ package main
 import (
     "net/http"
     "net/url"
-    "github.com/cssivision/reverseproxy"
+    "github.com/teamlint/reverseproxy"
 )
 
 func main() {
@@ -43,7 +43,7 @@ package main
 import (
     "net/http"
     "net/url"
-    "github.com/cssivision/reverseproxy"
+    "github.com/teamlint/reverseproxy"
 )
 
 func main() {
